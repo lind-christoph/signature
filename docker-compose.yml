@@ -1,0 +1,61 @@
+version: "3.5"
+services:
+   database:
+      image:
+         timescale/timescaledb:latest-pg12
+      container_name: signature_database
+      environment:
+         POSTGRES_DB: signature
+         POSTGRES_PASSWORD: signature123!
+      networks:
+         net1:
+            ipv4_address: 172.25.0.2
+      volumes:
+         -   "./data/pg/:/var/lib/postgresql/data"
+         -   "./config/database/entry:/docker-entrypoint-initdb.d"
+      restart: always
+   addon:
+      build: ./addon
+      container_name: signature_addon
+      volumes:
+         - "./data/web:/usr/share/web"
+      networks:
+         net1:
+            ipv4_address: 172.25.0.16
+      restart: always
+   backend:
+      build: ./backend
+      container_name: signature_backend
+      volumes:
+         - "./data/web:/usr/share/web"
+      networks:
+         net1:
+            ipv4_address: 172.25.0.3
+      restart: always
+      depends_on: 
+         - database
+   balancer:
+      build: ./config/nginx
+      ports:
+         - 7000:80 
+         - 7443:443 
+      volumes: 
+         - ./nginx/certbot/conf:/etc/letsencrypt
+         - ./nginx/certbot/www:/var/www/certbot
+      networks:
+         net1:
+            ipv4_address: 172.25.0.40 
+   certbot:
+      image: certbot/certbot
+      restart: unless-stopped
+      volumes:
+         - ./config/nginx/certbot/conf:/etc/letsencrypt
+         - ./data/certs:/var/www/certbot
+      entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+networks:
+   net1:
+      driver: bridge
+      ipam:
+         config:
+            -   subnet: 172.25.0.0/16
+
